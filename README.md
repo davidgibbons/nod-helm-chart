@@ -11,14 +11,13 @@ helm install nod oci://ghcr.io/davidgibbons/charts/nod \
   --namespace nod --create-namespace \
   --set publicUrl=https://nod.example.com \
   --set ingress.enabled=true --set ingress.host=nod.example.com
-kubectl label namespace nod pod-security.kubernetes.io/enforce=privileged
 ```
 
 Then follow the printed notes to read the server token.
 
 Requirements:
 
-- **A privileged namespace.** The workspace firewall sidecar needs `NET_ADMIN`, which the `baseline` Pod Security level rejects.
+- **Pod Security `baseline` or looser.** The workspace and the browser's init container run as root with a few capabilities.
 - **One release per namespace.** The server finds its workspace and browser by the fixed pod names `nod-workspace-0` and `nod-browser-0`.
 - **A NetworkPolicy-enforcing CNI**, to keep the browser off private addresses.
 
@@ -54,7 +53,7 @@ Nod's `pg` client treats `sslmode=require` as `verify-full`. `uselibpqcompat=tru
 | `runtime` proxies a narrow subset of the Docker API to the host socket. | `NOD_RUNTIME=kubernetes`: the server runs `kubectl exec` in the `runtime` container of each sandbox pod. A Role limits it to those two pods. |
 | `docker exec --user` picks each command's uid. | Kubernetes exec cannot pick a user, so the workspace container runs as root with only `SETUID`, `SETGID` and `SETPCAP`. Each command drops to its uid with `setpriv` and loses all capabilities. |
 | Connected CLIs install into the workspace container's `/var/tmp`. | `/var/tmp` is a volume, since a Kubernetes container restart starts from a fresh filesystem. |
-| `workspace-network` shares its network namespace with the workspace. | The same image and script run as a native sidecar in the workspace pod. |
+| Docker seeds `browser-data` from the image, owned by the browser's user. | An init container gives the browser's volume to uid 1000. |
 | Named volume `workspace-data` is shared by the server and workspace. | A `ReadWriteOnce` PVC, with pod affinity keeping both pods on one node. |
 | The `browser` network reaches the host's LAN. | A NetworkPolicy limits the browser and workspace to DNS and public addresses. |
 | Caddy `https` profile. | Not included; use `ingress`. |

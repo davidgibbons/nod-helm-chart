@@ -23,10 +23,6 @@ spec:
       securityContext:
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
-      # The firewall rejects private ranges, cluster DNS included.
-      dnsPolicy: None
-      dnsConfig:
-        nameservers: [1.1.1.1, 8.8.8.8]
       affinity:
         # Shares the RWO nod-workspace-data volume with the server.
         podAffinity:
@@ -34,30 +30,6 @@ spec:
             - topologyKey: kubernetes.io/hostname
               labelSelector:
                 matchLabels: {{- include "nod.selector" "server" | nindent 18 }}
-      initContainers:
-        # Sidecar that firewalls the pod's network namespace off from private
-        # and metadata addresses; the workspace starts once it is ready.
-        - name: network
-          image: {{ include "nod.image" (dict "root" . "name" "workspace") }}
-          imagePullPolicy: {{ .Values.images.pullPolicy }}
-          restartPolicy: Always
-          command: [/usr/local/bin/nod-workspace-network]
-          securityContext:
-            runAsUser: 0
-            runAsNonRoot: false
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities: {drop: [ALL], add: [NET_ADMIN]}
-          startupProbe:
-            exec:
-              command: [test, -f, /tmp/network-ready]
-            periodSeconds: 2
-            failureThreshold: 15
-          resources:
-            requests: {cpu: 5m, memory: 16Mi}
-            limits: {memory: 64Mi}
-          volumeMounts:
-            - {name: network-tmp, mountPath: /tmp}
       containers:
         # Runs as root so each exec can drop to its command's uid and clear its
         # capabilities; it holds nothing besides SETUID/SETGID/SETPCAP.
@@ -80,10 +52,6 @@ spec:
         - name: workspace
           persistentVolumeClaim:
             claimName: nod-workspace-data
-        - name: network-tmp
-          emptyDir:
-            medium: Memory
-            sizeLimit: 1Mi
   volumeClaimTemplates:
     - metadata:
         name: tools
