@@ -82,7 +82,6 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         runAsNonRoot: true
-        fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       affinity:
         # nod-workspace-data is RWO; prefer the node the workspace already holds it on.
@@ -93,6 +92,24 @@ spec:
                 topologyKey: kubernetes.io/hostname
                 labelSelector:
                   matchLabels: {{- include "nod.selector" "workspace" | nindent 20 }}
+      initContainers:
+        # Nod refuses a data root it doesn't own or that others can write.
+        # fsGroup would make the volume group-writable, so this sets it instead.
+        - name: own-data
+          image: {{ include "nod.image" (dict "root" . "name" "server") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [sh, -c, 'chown 1000:1000 /var/lib/nod && chmod 700 /var/lib/nod']
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL], add: [CHOWN, FOWNER]}
+          resources:
+            requests: {cpu: 5m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/nod}
       containers:
         - name: server
           image: {{ include "nod.image" (dict "root" . "name" "server") }}
