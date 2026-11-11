@@ -1,4 +1,4 @@
-# The shim in the server image targets pod nod-browser-0 by name.
+# The server execs into pod nod-browser-0, container runtime, by name.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -28,7 +28,7 @@ spec:
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
       containers:
-        - name: browser
+        - name: runtime
           image: {{ include "nod.image" (dict "root" . "name" "browser") }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
           securityContext:

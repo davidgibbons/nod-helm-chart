@@ -1,4 +1,4 @@
-# The shim in the server image targets pod nod-workspace-0 by name.
+# The server execs into pod nod-workspace-0, container runtime, by name.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -59,21 +59,23 @@ spec:
           volumeMounts:
             - {name: network-tmp, mountPath: /tmp}
       containers:
-        # Runs as root so exec can drop to each command's own uid; it holds
-        # no capabilities besides SETUID/SETGID.
-        - name: workspace
+        # Runs as root so each exec can drop to its command's uid and clear its
+        # capabilities; it holds nothing besides SETUID/SETGID/SETPCAP.
+        - name: runtime
           image: {{ include "nod.image" (dict "root" . "name" "workspace") }}
           imagePullPolicy: {{ .Values.images.pullPolicy }}
-          command: [sleep, infinity]
+          # Connected CLIs each run as their own uid and need /var/tmp's usual 1777.
+          command: [sh, -c, 'chmod 1777 /var/tmp && exec sleep infinity']
           securityContext:
             runAsUser: 0
             runAsNonRoot: false
             allowPrivilegeEscalation: false
-            capabilities: {drop: [ALL], add: [SETUID, SETGID]}
+            capabilities: {drop: [ALL], add: [SETUID, SETGID, SETPCAP]}
           resources: {{- toYaml .Values.workspace.resources | nindent 12 }}
           volumeMounts:
             - {name: workspace, mountPath: /workspace}
             - {name: tools, mountPath: /home/node}
+            - {name: cli, mountPath: /var/tmp}
       volumes:
         - name: workspace
           persistentVolumeClaim:
@@ -91,3 +93,11 @@ spec:
         resources:
           requests:
             storage: {{ .Values.workspace.persistence.toolsSize }}
+    - metadata:
+        name: cli
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- include "nod.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.workspace.persistence.cliSize }}

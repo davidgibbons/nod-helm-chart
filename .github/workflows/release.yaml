@@ -18,15 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Test docker shim
-        run: sh images/server/test.sh
-
       - name: Read upstream version
         run: echo "VERSION=$(yq '.appVersion' charts/nod/Chart.yaml)" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v5
         with:
-          repository: n8n-io/nod
+          # Fork carrying n8n-io/nod#731 (Kubernetes runtime) on the release tag.
+          repository: davidgibbons/nod
           ref: nod-v${{ env.VERSION }}
           path: upstream
 
@@ -38,9 +36,9 @@ jobs:
 
       - name: Build images
         run: |
-          docker build -t nod-server-upstream -f upstream/deployment/self-host/Dockerfile upstream
-          docker build --label "$SOURCE" --build-arg BASE=nod-server-upstream \
-            -t "$REGISTRY/nod-server:$VERSION" images/server
+          docker build -t nod-server -f upstream/deployment/self-host/Dockerfile upstream
+          docker build --label "$SOURCE" -f upstream/deployment/kubernetes/Dockerfile \
+            -t "$REGISTRY/nod-server:$VERSION" upstream
           docker build --label "$SOURCE" -f upstream/Dockerfile.workspace \
             -t "$REGISTRY/nod-workspace:$VERSION" upstream
           docker build --label "$SOURCE" -f upstream/Dockerfile.browser \

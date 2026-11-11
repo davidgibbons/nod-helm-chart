@@ -112,8 +112,11 @@ spec:
             - name: NOD_PUBLIC_URL
               value: {{ required "publicUrl is required" .Values.publicUrl | quote }}
             - {name: NOD_ANALYTICS_ENABLED, value: "false"}
-            - {name: WORKSPACE_CONTAINER, value: nod-workspace-0}
-            - {name: BROWSER_CONTAINER, value: nod-browser-0}
+            - {name: NOD_RUNTIME, value: kubernetes}
+            - name: NOD_KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             {{- with .Values.externalDatabase }}
             {{- if .secretName }}
             - name: NOD_EXTERNAL_DATABASE_URL

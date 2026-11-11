@@ -35,6 +35,7 @@ workspace:
     # Shared with the server pod, which therefore runs on the same node.
     dataSize: 20Gi
     toolsSize: 5Gi
+    cliSize: 5Gi
 
 browser:
   podAnnotations: {}

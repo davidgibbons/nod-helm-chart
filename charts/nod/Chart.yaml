@@ -2,9 +2,9 @@ apiVersion: v2
 name: nod
 description: Nod, n8n's personal agent with its own computer, on Kubernetes.
 type: application
-version: 0.2.0
-# Upstream release tag is nod-v<appVersion>; CI builds the images from it.
-appVersion: "0.6.2"
+version: 0.3.0
+# Tag nod-v<appVersion> in davidgibbons/nod; CI builds the images from it.
+appVersion: "0.6.2-k8s"
 home: https://github.com/davidgibbons/nod-helm-chart
 sources:
   - https://github.com/n8n-io/nod
