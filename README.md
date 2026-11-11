@@ -30,10 +30,22 @@ With `existingSecret` empty, the chart generates the `nod` Secret on first insta
 | --- | --- |
 | `NOD_AUTH_TOKEN` | At least 43 characters from `A-Z a-z 0-9 _ -`. Users sign in with it. |
 | `NOD_VAULT_KEY` | 32 random bytes, base64: `openssl rand -base64 32`. |
-| `NOD_POSTGRES_PASSWORD` | Password for the bundled PostgreSQL. |
-| `DATABASE_URL` | Only with `postgres.enabled: false`. |
+| `NOD_POSTGRES_PASSWORD` | Password for the bundled PostgreSQL. Not needed with `externalDatabase`. |
 
 Back up `NOD_VAULT_KEY` off the cluster. Without it, saved credentials cannot be decrypted, and the database backup alone cannot recover them.
+
+## External PostgreSQL
+
+Point `externalDatabase.secretName` at a Secret holding a `postgresql://` URL, and the chart skips its bundled PostgreSQL. For a Crunchy PGO cluster, which accepts TLS connections only:
+
+```yaml
+externalDatabase:
+  secretName: nod-postgres-pguser-nod
+  key: uri
+  query: sslmode=require&uselibpqcompat=true
+```
+
+Nod's `pg` client treats `sslmode=require` as `verify-full`. `uselibpqcompat=true` restores the libpq meaning: encrypt, without verifying the certificate.
 
 ## How it differs from Compose
 

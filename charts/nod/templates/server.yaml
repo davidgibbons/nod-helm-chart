@@ -114,9 +114,19 @@ spec:
             - {name: NOD_ANALYTICS_ENABLED, value: "false"}
             - {name: WORKSPACE_CONTAINER, value: nod-workspace-0}
             - {name: BROWSER_CONTAINER, value: nod-browser-0}
-            {{- if .Values.postgres.enabled }}
+            {{- with .Values.externalDatabase }}
+            {{- if .secretName }}
+            - name: NOD_EXTERNAL_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .key }}
+            - name: DATABASE_URL
+              value: "$(NOD_EXTERNAL_DATABASE_URL){{ with .query }}?{{ . }}{{ end }}"
+            {{- else }}
             - name: DATABASE_URL
               value: postgresql://nod:$(NOD_POSTGRES_PASSWORD)@nod-postgres:5432/nod
+            {{- end }}
             {{- end }}
             {{- range $k, $v := .Values.server.env }}
             - name: {{ $k }}
