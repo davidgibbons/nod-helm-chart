@@ -1,0 +1,93 @@
+# The shim in the server image targets pod nod-workspace-0 by name.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nod-workspace
+  labels: {{- include "nod.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: nod-workspace
+  selector:
+    matchLabels: {{- include "nod.selector" "workspace" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "nod.selector" "workspace" | nindent 8 }}
+      {{- with .Values.workspace.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      # The firewall rejects private ranges, cluster DNS included.
+      dnsPolicy: None
+      dnsConfig:
+        nameservers: [1.1.1.1, 8.8.8.8]
+      affinity:
+        # Shares the RWO nod-workspace-data volume with the server.
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels: {{- include "nod.selector" "server" | nindent 18 }}
+      initContainers:
+        # Sidecar that firewalls the pod's network namespace off from private
+        # and metadata addresses; the workspace starts once it is ready.
+        - name: network
+          image: {{ include "nod.image" (dict "root" . "name" "workspace") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          restartPolicy: Always
+          command: [/usr/local/bin/nod-workspace-network]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL], add: [NET_ADMIN]}
+          startupProbe:
+            exec:
+              command: [test, -f, /tmp/network-ready]
+            periodSeconds: 2
+            failureThreshold: 15
+          resources:
+            requests: {cpu: 5m, memory: 16Mi}
+            limits: {memory: 64Mi}
+          volumeMounts:
+            - {name: network-tmp, mountPath: /tmp}
+      containers:
+        # Runs as root so exec can drop to each command's own uid; it holds
+        # no capabilities besides SETUID/SETGID.
+        - name: workspace
+          image: {{ include "nod.image" (dict "root" . "name" "workspace") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [sleep, infinity]
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL], add: [SETUID, SETGID]}
+          resources: {{- toYaml .Values.workspace.resources | nindent 12 }}
+          volumeMounts:
+            - {name: workspace, mountPath: /workspace}
+            - {name: tools, mountPath: /home/node}
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: nod-workspace-data
+        - name: network-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: tools
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- include "nod.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.workspace.persistence.toolsSize }}

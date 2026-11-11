@@ -1,0 +1,65 @@
+# Browser origin users open Nod at, e.g. https://nod.example.com. No path.
+publicUrl: ""
+
+# Secret holding NOD_AUTH_TOKEN, NOD_VAULT_KEY and NOD_POSTGRES_PASSWORD
+# (or DATABASE_URL when postgres.enabled is false). Leave empty to have the
+# chart generate one; generation needs Helm `lookup`, so GitOps tools that
+# render with `helm template` (ArgoCD) must supply their own.
+existingSecret: ""
+
+images:
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+  server: ghcr.io/davidgibbons/nod-server
+  workspace: ghcr.io/davidgibbons/nod-workspace
+  browser: ghcr.io/davidgibbons/nod-browser
+  postgres: postgres:17-alpine
+
+storageClass: ""
+
+server:
+  env: {}
+  podAnnotations: {}
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 2Gi}
+  persistence:
+    size: 5Gi
+
+workspace:
+  podAnnotations: {}
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 2Gi}
+  persistence:
+    # Shared with the server pod, which therefore runs on the same node.
+    dataSize: 20Gi
+    toolsSize: 5Gi
+
+browser:
+  podAnnotations: {}
+  resources:
+    requests: {cpu: 250m, memory: 1Gi}
+    limits: {memory: 3Gi}
+  persistence:
+    size: 5Gi
+
+postgres:
+  enabled: true
+  podAnnotations: {}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 1Gi}
+  persistence:
+    size: 10Gi
+
+service:
+  port: 4310
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ""
+  tls: []

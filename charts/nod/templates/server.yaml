@@ -1,0 +1,168 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nod-server
+  labels: {{- include "nod.labels" . | nindent 4 }}
+---
+# The server reaches its workspace and browser only through exec on these two pods.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nod-server
+  labels: {{- include "nod.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    resourceNames: [nod-workspace-0, nod-browser-0]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods/exec]
+    resourceNames: [nod-workspace-0, nod-browser-0]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nod-server
+  labels: {{- include "nod.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nod-server
+subjects:
+  - kind: ServiceAccount
+    name: nod-server
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nod-server-data
+  labels: {{- include "nod.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- include "nod.storageClass" . | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.server.persistence.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nod-workspace-data
+  labels: {{- include "nod.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- include "nod.storageClass" . | nindent 2 }}
+  resources:
+    requests:
+      storage: {{ .Values.workspace.persistence.dataSize }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nod-server
+  labels: {{- include "nod.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "nod.selector" "server" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "nod.selector" "server" | nindent 8 }}
+      {{- with .Values.server.podAnnotations }}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: nod-server
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      affinity:
+        # nod-workspace-data is RWO; prefer the node the workspace already holds it on.
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {{- include "nod.selector" "workspace" | nindent 20 }}
+      containers:
+        - name: server
+          image: {{ include "nod.image" (dict "root" . "name" "server") }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 4310
+          envFrom:
+            - secretRef:
+                name: {{ include "nod.secret" . }}
+          env:
+            - {name: NODE_ENV, value: production}
+            - {name: NOD_ENVIRONMENT, value: production}
+            - {name: NOD_HOST, value: 0.0.0.0}
+            - {name: PORT, value: "4310"}
+            - {name: NOD_DATA_ROOT, value: /var/lib/nod}
+            - name: NOD_PUBLIC_URL
+              value: {{ required "publicUrl is required" .Values.publicUrl | quote }}
+            - {name: NOD_ANALYTICS_ENABLED, value: "false"}
+            - {name: WORKSPACE_CONTAINER, value: nod-workspace-0}
+            - {name: BROWSER_CONTAINER, value: nod-browser-0}
+            {{- if .Values.postgres.enabled }}
+            - name: DATABASE_URL
+              value: postgresql://nod:$(NOD_POSTGRES_PASSWORD)@nod-postgres:5432/nod
+            {{- end }}
+            {{- range $k, $v := .Values.server.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          startupProbe:
+            exec:
+              command: [node, /app/healthcheck.mjs]
+            periodSeconds: 5
+            timeoutSeconds: 6
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command: [node, /app/healthcheck.mjs]
+            periodSeconds: 15
+            timeoutSeconds: 6
+            failureThreshold: 10
+          resources: {{- toYaml .Values.server.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/nod}
+            - {name: workspace, mountPath: /var/lib/nod/workspaces}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nod-server-data
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: nod-workspace-data
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nod
+  labels: {{- include "nod.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "nod.selector" "server" | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

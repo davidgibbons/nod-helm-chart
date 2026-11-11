@@ -1,0 +1,5 @@
+Open {{ .Values.publicUrl }} and sign in with the server token:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "nod.secret" . }} -o go-template='{{"{{"}}.data.NOD_AUTH_TOKEN | base64decode{{"}}"}}'
+
+Back up NOD_VAULT_KEY from the same Secret: without it, saved credentials cannot be decrypted.

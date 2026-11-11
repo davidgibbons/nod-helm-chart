@@ -1,0 +1,59 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
+      SOURCE: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Test docker shim
+        run: sh images/server/test.sh
+
+      - name: Read upstream version
+        run: echo "VERSION=$(yq '.appVersion' charts/nod/Chart.yaml)" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v5
+        with:
+          repository: n8n-io/nod
+          ref: nod-v${{ env.VERSION }}
+          path: upstream
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build images
+        run: |
+          docker build -t nod-server-upstream -f upstream/deployment/self-host/Dockerfile upstream
+          docker build --label "$SOURCE" --build-arg BASE=nod-server-upstream \
+            -t "$REGISTRY/nod-server:$VERSION" images/server
+          docker build --label "$SOURCE" -f upstream/Dockerfile.workspace \
+            -t "$REGISTRY/nod-workspace:$VERSION" upstream
+          docker build --label "$SOURCE" -f upstream/Dockerfile.browser \
+            -t "$REGISTRY/nod-browser:$VERSION" upstream
+
+      - name: Push images
+        run: |
+          for image in server workspace browser; do
+            docker push "$REGISTRY/nod-$image:$VERSION"
+          done
+
+      - name: Push chart
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm package charts/nod
+          helm push nod-*.tgz "oci://$REGISTRY/charts"
