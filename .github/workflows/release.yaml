@@ -16,12 +16,12 @@ jobs:
       REGISTRY: ghcr.io/${{ github.repository_owner }}
       SOURCE: org.opencontainers.image.source=https://github.com/${{ github.repository }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Read upstream version
         run: echo "VERSION=$(yq '.appVersion' charts/nod/Chart.yaml)" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Fork carrying n8n-io/nod#731 (Kubernetes runtime) on the release tag.
           repository: davidgibbons/nod
