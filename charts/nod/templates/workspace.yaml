@@ -53,18 +53,24 @@ spec:
           persistentVolumeClaim:
             claimName: nod-workspace-data
   volumeClaimTemplates:
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: tools
       spec:
         accessModes: [ReadWriteOnce]
+        volumeMode: Filesystem
         {{- include "nod.storageClass" . | nindent 8 }}
         resources:
           requests:
             storage: {{ .Values.workspace.persistence.toolsSize }}
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: cli
       spec:
         accessModes: [ReadWriteOnce]
+        volumeMode: Filesystem
         {{- include "nod.storageClass" . | nindent 8 }}
         resources:
           requests:
