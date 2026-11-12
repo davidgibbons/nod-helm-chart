@@ -19,6 +19,8 @@ storageClass: ""
 
 server:
   env: {}
+  # Full EnvVar entries, for values read from a Secret.
+  extraEnv: []
   podAnnotations: {}
   resources:
     requests: {cpu: 250m, memory: 512Mi}
